@@ -21,7 +21,11 @@ class MainViewModel(application: Application, private val useCase: MLProcessingU
     private val _errorState = MutableStateFlow<FailureReason?>(null)
     val errorState: StateFlow<FailureReason?> = _errorState
 
+    private val _frameSize = MutableStateFlow(0 to 0)
+    val frameSize: StateFlow<Pair<Int, Int>> = _frameSize
+
     fun processImageFrame(imageProxy: ImageProxy) {
+        _frameSize.update { imageProxy.width to imageProxy.height }
         viewModelScope.launch {
             try {
                 val result = useCase.processFrame(imageProxy)

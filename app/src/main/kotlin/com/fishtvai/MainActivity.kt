@@ -21,6 +21,7 @@ import com.fishtvai.ml.InferenceEngine
 import com.fishtvai.model.DisplayModel
 import com.fishtvai.usecase.MLProcessingUseCase
 import com.fishtvai.viewmodel.MainViewModel
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -60,6 +61,23 @@ class MainActivity : AppCompatActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.displayState.collect { displayModel ->
                     updateUI(displayModel)
+                }
+            }
+        }
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                combine(
+                    viewModel.displayState,
+                    viewModel.frameSize
+                ) { displayModel, frameSize ->
+                    Pair(displayModel, frameSize)
+                }.collect { (displayModel, frameSize) ->
+                    val w = frameSize.first
+                    val h = frameSize.second
+                    if (w > 0 && h > 0) {
+                        binding.boundingBoxOverlay.setDetections(displayModel.detections, w, h)
+                    }
                 }
             }
         }
