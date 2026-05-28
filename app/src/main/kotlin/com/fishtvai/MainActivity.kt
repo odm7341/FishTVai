@@ -12,7 +12,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
-import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
@@ -105,11 +104,6 @@ class MainActivity : AppCompatActivity() {
         val cameraProvider = cameraProvider ?: return
         val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
-        val preview = Preview.Builder()
-            .setTargetRotation(binding.previewView.display.rotation)
-            .build()
-        preview.setSurfaceProvider(binding.previewView.surfaceProvider)
-
         val imageAnalysis = ImageAnalysis.Builder()
             .setTargetResolution(android.util.Size(1920, 1080))
             .build()
@@ -122,10 +116,11 @@ class MainActivity : AppCompatActivity() {
             if (image != null && isDetecting && now - lastProcessTime >= 2000) {
                 Log.i("MainActivity", "Camera frame: ${frameWidth}x${frameHeight}")
                 lastProcessTime = now
-                val tensor = com.fishtvai.ml.util.ImageUtils.processImageToTensor(image, 640, 640)
+                val result = com.fishtvai.ml.util.ImageUtils.processImageToTensor(image, 640, 640)
                 imageProxy.close()
-                if (tensor != null) {
-                    viewModel.processFrame(tensor, frameWidth, frameHeight)
+                if (result != null) {
+                    runOnUiThread { binding.preprocessedImage.setImageBitmap(result.bitmap) }
+                    viewModel.processFrame(result.tensorBuffer, frameWidth, frameHeight)
                 }
             } else {
                 imageProxy.close()
@@ -136,8 +131,7 @@ class MainActivity : AppCompatActivity() {
         cameraProvider.bindToLifecycle(
             this,
             cameraSelector,
-            imageAnalysis,
-            preview
+            imageAnalysis
         )
     }
 
