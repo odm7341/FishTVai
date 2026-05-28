@@ -141,6 +141,15 @@ class InferenceEngine(private val context: Context, private val modelFilename: S
                     val rm0_c2  = outputArray[6]
                     Log.i("InferenceEngine", "Col-major [7,$cols] det0: cx=$cm0_cx cy=$cm0_cy w=$cm0_bw h=$cm0_bh cls=$cm0_c0,$cm0_c1,$cm0_c2")
                     Log.i("InferenceEngine", "Row-major [$cols,7] det0: cx=$rm0_cx cy=$rm0_cy w=$rm0_bw h=$rm0_bh cls=$rm0_c0,$rm0_c1,$rm0_c2")
+                    // Sample class scores at every 1000th position
+                    val colSamplePositions = listOf(0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000).filter { it < cols }
+                    val clsSamples = colSamplePositions.joinToString(" | ") { col ->
+                        val c0 = outputArray[4 * cols + col]
+                        val c1 = outputArray[5 * cols + col]
+                        val c2 = outputArray[6 * cols + col]
+                        "col$col: cls=$c0,$c1,$c2"
+                    }
+                    Log.i("InferenceEngine", "Cls samples across cols: $clsSamples")
                 }
 
                 val dets = parseYoloOutput(outputArray)
