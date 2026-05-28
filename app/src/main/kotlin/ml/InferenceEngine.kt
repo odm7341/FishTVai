@@ -120,13 +120,13 @@ class InferenceEngine(private val context: Context, private val modelFilename: S
                 Log.i("InferenceEngine", "Output '$outName': ${outputArray.size} floats, first 10: ${outputArray.take(10)}")
 
                 val expectedStride = 4 + labels.size
-                val cols = outputArray.size / expectedStride
+                // Log row-major interpretation: cls scores at detection 0 and detection ~4200
+                val rows = outputArray.size / expectedStride
                 if (outputArray.size % expectedStride == 0) {
-                    val cls0 = outputArray[4 * cols + 0]
-                    val cls1 = outputArray[5 * cols + 0]
-                    val cls2 = outputArray[6 * cols + 0]
-                    val clsMid = outputArray[4 * cols + cols / 2]
-                    Log.i("InferenceEngine", "Cls values: col0=$cls0,$cls1,$cls2 colMid=$clsMid")
+                    val rm0_c0 = outputArray[4]; val rm0_c1 = outputArray[5]; val rm0_c2 = outputArray[6]
+                    val midOff = (rows / 2) * expectedStride
+                    val rmMid_c0 = outputArray[midOff + 4]
+                    Log.i("InferenceEngine", "Row-major det0 cls=$rm0_c0,$rm0_c1,$rm0_c2 detMid cls0=$rmMid_c0")
                 }
 
                 val dets = parseYoloOutput(outputArray)
@@ -156,29 +156,27 @@ class InferenceEngine(private val context: Context, private val modelFilename: S
         val expectedStride = 4 + numClasses
 
         if (n % expectedStride == 0) {
+            val rows = n / expectedStride
+            for (useSigmoid in listOf(true, false)) {
+                val sigLabel = if (useSigmoid) "sigmoid" else "raw"
+                Log.i("InferenceEngine", "Trying row-major [cx,cy,w,h,cls] $sigLabel: $rows x $expectedStride")
+                val dets = parseRawRows(outputArray, rows, useSigmoid)
+                if (dets.isNotEmpty()) return dets
+            }
+        }
+
+        if (n % expectedStride == 0) {
             val cols = n / expectedStride
-            // Try correct format [cx,cy,w,h,cls] with sigmoid first
             for (useSigmoid in listOf(true, false)) {
                 val sigLabel = if (useSigmoid) "sigmoid" else "raw"
                 Log.i("InferenceEngine", "Trying col-major [cx,cy,w,h,cls] $sigLabel: ${expectedStride} x $cols")
                 val dets = parseBoxClassColumns(outputArray, cols, boxFirst = true, useSigmoid)
                 if (dets.isNotEmpty()) return dets
             }
-            // Then try [cls,cx,cy,w,h]
             for (useSigmoid in listOf(true, false)) {
                 val sigLabel = if (useSigmoid) "sigmoid" else "raw"
                 Log.i("InferenceEngine", "Trying col-major [cls,cx,cy,w,h] $sigLabel: ${expectedStride} x $cols")
                 val dets = parseBoxClassColumns(outputArray, cols, boxFirst = false, useSigmoid)
-                if (dets.isNotEmpty()) return dets
-            }
-        }
-
-        if (n % expectedStride == 0) {
-            val rows = n / expectedStride
-            for (useSigmoid in listOf(false, true)) {
-                val sigLabel = if (useSigmoid) "sigmoid" else "raw"
-                Log.i("InferenceEngine", "Trying row-major [cx,cy,w,h,cls] $sigLabel: $rows x $expectedStride")
-                val dets = parseRawRows(outputArray, rows, useSigmoid)
                 if (dets.isNotEmpty()) return dets
             }
         }
