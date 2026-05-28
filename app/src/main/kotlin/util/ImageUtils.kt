@@ -55,9 +55,10 @@ object ImageUtils {
                 val g = rgbBytes[srcIdx + 1].toInt() and 0xFF
                 val b = rgbBytes[srcIdx + 2].toInt() and 0xFF
 
-                tensorBuffer.putFloat(r / 255.0f)
-                tensorBuffer.putFloat(g / 255.0f)
+                // Try BGR order instead of RGB (model may have been trained on OpenCV/BGR images)
                 tensorBuffer.putFloat(b / 255.0f)
+                tensorBuffer.putFloat(g / 255.0f)
+                tensorBuffer.putFloat(r / 255.0f)
             }
         }
 
