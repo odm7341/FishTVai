@@ -174,23 +174,25 @@ class InferenceEngine(private val context: Context, private val modelFilename: S
 
         if (n % expectedStride == 0) {
             val cols = n / expectedStride
-            Log.i("InferenceEngine", "Trying col-major [cx,cy,w,h,cls]: ${expectedStride} x $cols")
-            val dets = parseBoxClassColumns(outputArray, cols, boxFirst = true)
-            if (dets.isNotEmpty()) return dets
-        }
-
-        if (n % expectedStride == 0) {
-            val cols = n / expectedStride
-            Log.i("InferenceEngine", "Trying col-major [cls,cx,cy,w,h]: ${expectedStride} x $cols")
-            val dets = parseBoxClassColumns(outputArray, cols, boxFirst = false)
-            if (dets.isNotEmpty()) return dets
+            for (useSigmoid in listOf(false, true)) {
+                for (boxFirst in listOf(true, false)) {
+                    val label = if (boxFirst) "[cx,cy,w,h,cls]" else "[cls,cx,cy,w,h]"
+                    val sigLabel = if (useSigmoid) "sigmoid" else "raw"
+                    Log.i("InferenceEngine", "Trying col-major $label $sigLabel: ${expectedStride} x $cols")
+                    val dets = parseBoxClassColumns(outputArray, cols, boxFirst, useSigmoid)
+                    if (dets.isNotEmpty()) return dets
+                }
+            }
         }
 
         if (n % expectedStride == 0) {
             val rows = n / expectedStride
-            Log.i("InferenceEngine", "Trying row-major [cx,cy,w,h,cls]: $rows x $expectedStride")
-            val dets = parseRawRows(outputArray, rows)
-            if (dets.isNotEmpty()) return dets
+            for (useSigmoid in listOf(false, true)) {
+                val sigLabel = if (useSigmoid) "sigmoid" else "raw"
+                Log.i("InferenceEngine", "Trying row-major [cx,cy,w,h,cls] $sigLabel: $rows x $expectedStride")
+                val dets = parseRawRows(outputArray, rows, useSigmoid)
+                if (dets.isNotEmpty()) return dets
+            }
         }
 
         if (numClasses > 0 && n >= numClasses) {
@@ -203,7 +205,7 @@ class InferenceEngine(private val context: Context, private val modelFilename: S
         return emptyList()
     }
 
-    private fun parseBoxClassColumns(outputArray: FloatArray, cols: Int, boxFirst: Boolean): List<Detection> {
+    private fun parseBoxClassColumns(outputArray: FloatArray, cols: Int, boxFirst: Boolean, useSigmoid: Boolean): List<Detection> {
         val detections = mutableListOf<Detection>()
         val numClasses = labels.size
         for (col in 0 until cols) {
@@ -235,7 +237,8 @@ class InferenceEngine(private val context: Context, private val modelFilename: S
             var bestScore = -1f
             var bestIdx = -1
             for (c in 0 until numClasses) {
-                val score = sigmoid(outputArray[(clsStart + c) * cols + col])
+                val raw = outputArray[(clsStart + c) * cols + col]
+                val score = if (useSigmoid) sigmoid(raw) else raw.coerceIn(0f, 1f)
                 if (score > bestScore) {
                     bestScore = score
                     bestIdx = c
@@ -259,7 +262,7 @@ class InferenceEngine(private val context: Context, private val modelFilename: S
         return detections
     }
 
-    private fun parseRawRows(outputArray: FloatArray, rows: Int): List<Detection> {
+    private fun parseRawRows(outputArray: FloatArray, rows: Int, useSigmoid: Boolean): List<Detection> {
         val numClasses = labels.size
         val stride = 4 + numClasses
         val detections = mutableListOf<Detection>()
@@ -274,7 +277,8 @@ class InferenceEngine(private val context: Context, private val modelFilename: S
             var bestScore = -1f
             var bestIdx = -1
             for (c in 0 until numClasses) {
-                val score = sigmoid(outputArray[offset + 4 + c])
+                val raw = outputArray[offset + 4 + c]
+                val score = if (useSigmoid) sigmoid(raw) else raw.coerceIn(0f, 1f)
                 if (score > bestScore) {
                     bestScore = score
                     bestIdx = c
