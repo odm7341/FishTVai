@@ -5,6 +5,7 @@ import android.media.Image
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.max
+import kotlin.math.min
 
 object ImageUtils {
 
@@ -42,6 +43,13 @@ object ImageUtils {
             }
         }
 
+        val scale = min(targetWidth.toFloat() / width, targetHeight.toFloat() / height)
+        val scaledW = (width * scale).toInt()
+        val scaledH = (height * scale).toInt()
+        val offsetX = (targetWidth - scaledW) / 2
+        val offsetY = (targetHeight - scaledH) / 2
+        val gray = 114f / 255f
+
         val tensorSize = targetWidth * targetHeight * 3
         val tensorBuffer = ByteBuffer.allocateDirect(tensorSize * 4).order(ByteOrder.nativeOrder())
 
@@ -50,24 +58,27 @@ object ImageUtils {
 
         for (py in 0 until targetHeight) {
             for (px in 0 until targetWidth) {
-                val sourceX = (px * width / targetWidth).coerceIn(0, width - 1)
-                val sourceY = (py * height / targetHeight).coerceIn(0, height - 1)
-
-                val srcIdx = (sourceY * width + sourceX) * 3
-                val r = rgbBytes[srcIdx].toInt() and 0xFF
-                val g = rgbBytes[srcIdx + 1].toInt() and 0xFF
-                val b = rgbBytes[srcIdx + 2].toInt() and 0xFF
-
-                // Convert to [0, 1] range (standard YOLO normalization)
-                val hwcIdx = (py * targetWidth + px) * 3
-                chwData[hwcIdx] = r / 255.0f
-                chwData[hwcIdx + 1] = g / 255.0f
-                chwData[hwcIdx + 2] = b / 255.0f
+                val pixelIdx = (py * targetWidth + px) * 3
+                // Check if in padded area — fill with gray
+                if (px < offsetX || px >= offsetX + scaledW || py < offsetY || py >= offsetY + scaledH) {
+                    chwData[pixelIdx] = gray
+                    chwData[pixelIdx + 1] = gray
+                    chwData[pixelIdx + 2] = gray
+                } else {
+                    val sourceX = ((px - offsetX) / scale).toInt().coerceIn(0, width - 1)
+                    val sourceY = ((py - offsetY) / scale).toInt().coerceIn(0, height - 1)
+                    val srcIdx = (sourceY * width + sourceX) * 3
+                    val r = rgbBytes[srcIdx].toInt() and 0xFF
+                    val g = rgbBytes[srcIdx + 1].toInt() and 0xFF
+                    val b = rgbBytes[srcIdx + 2].toInt() and 0xFF
+                    chwData[pixelIdx] = r / 255.0f
+                    chwData[pixelIdx + 1] = g / 255.0f
+                    chwData[pixelIdx + 2] = b / 255.0f
+                }
             }
         }
 
         // Write in CHW order (model expects NCHW: [1, 3, H, W])
-        // All R values, then all G values, then all B values
         for (c in 0 until 3) {
             for (py in 0 until targetHeight) {
                 for (px in 0 until targetWidth) {

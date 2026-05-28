@@ -225,7 +225,7 @@ class InferenceEngine(private val context: Context, private val modelFilename: S
                 }
             }
 
-            if (bestScore > 0.3f && bestIdx >= 0) {
+            if (bestScore > 0.5f && bestIdx >= 0) {
                 val x = (cx - bw / 2f).coerceIn(0f, 639f)
                 val y = (cy - bh / 2f).coerceIn(0f, 639f)
                 val w = bw.coerceIn(0f, 639f - x)
@@ -265,7 +265,7 @@ class InferenceEngine(private val context: Context, private val modelFilename: S
                 }
             }
 
-            if (bestScore > 0.3f && bestIdx >= 0) {
+            if (bestScore > 0.5f && bestIdx >= 0) {
                 val x = (cx - bw / 2f).coerceIn(0f, 639f)
                 val y = (cy - bh / 2f).coerceIn(0f, 639f)
                 val w = bw.coerceIn(0f, 639f - x)
@@ -283,12 +283,24 @@ class InferenceEngine(private val context: Context, private val modelFilename: S
     }
 
     private fun parseClassification(outputArray: FloatArray): List<Detection> {
-        // Model already has internal sigmoid; values are probabilities in [0,1]
-        val maxIndex = (0 until labels.size).maxByOrNull { outputArray[it] } ?: return emptyList()
-        val confidence = outputArray[maxIndex].coerceIn(0f, 1f)
-        if (confidence > 0.3f) {
+        // Model already has internal sigmoid; class scores are at rows 4+ in column-major [7,8400]
+        val numClasses = labels.size
+        val expectedStride = 4 + numClasses
+        val cols = outputArray.size / expectedStride
+        if (outputArray.size % expectedStride != 0 || cols == 0) return emptyList()
+
+        var bestScore = -1f
+        var bestIdx = -1
+        for (c in 0 until numClasses) {
+            val score = outputArray[(4 + c) * cols].coerceIn(0f, 1f)
+            if (score > bestScore) {
+                bestScore = score
+                bestIdx = c
+            }
+        }
+        if (bestScore > 0.5f && bestIdx >= 0) {
             return listOf(
-                Detection(labels.getOrElse(maxIndex) { "class_$maxIndex" }, confidence, Rect(100, 80, 500, 380))
+                Detection(labels.getOrElse(bestIdx) { "class_$bestIdx" }, bestScore, Rect(100, 80, 500, 380))
             )
         }
         return emptyList()
