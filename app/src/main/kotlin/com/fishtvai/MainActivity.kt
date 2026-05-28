@@ -111,6 +111,7 @@ class MainActivity : AppCompatActivity() {
         preview.setSurfaceProvider(binding.previewView.surfaceProvider)
 
         val imageAnalysis = ImageAnalysis.Builder()
+            .setTargetResolution(android.util.Size(1920, 1080))
             .build()
 
         imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
