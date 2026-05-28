@@ -3,6 +3,7 @@ package com.fishtvai.ml.util
 import android.annotation.SuppressLint
 import android.media.Image
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import kotlin.math.max
 
 object ImageUtils {
@@ -42,7 +43,7 @@ object ImageUtils {
         }
 
         val tensorSize = targetWidth * targetHeight * 3
-        val tensorBuffer = ByteBuffer.allocateDirect(tensorSize * 4)
+        val tensorBuffer = ByteBuffer.allocateDirect(tensorSize * 4).order(ByteOrder.nativeOrder())
 
         for (py in 0 until targetHeight) {
             for (px in 0 until targetWidth) {
