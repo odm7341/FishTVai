@@ -151,9 +151,6 @@ class InferenceEngine(private val context: Context, private val modelFilename: S
             results.close()
 
             Log.i("InferenceEngine", "Total detections: ${allDetections.size}")
-            for (d in allDetections) {
-                Log.i("InferenceEngine", "  ${d.label} conf=${d.confidence} box=${d.boundingBoxPixels}")
-            }
 
             return DisplayModel(
                 totalDetections = allDetections.size,
