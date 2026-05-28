@@ -136,9 +136,15 @@ class InferenceEngine(private val context: Context, private val modelFilename: S
             inputTensor.close()
             results.close()
 
-            val filtered = nms(allDetections)
+            val nmsResult = nms(allDetections)
+            // Heuristic: if all detections cluster around 0.5 (sigmoid of near-zero logits), model detects nothing
+            val confidences = nmsResult.map { it.confidence }
+            val isNoise = confidences.isNotEmpty() &&
+                confidences.all { it in 0.45f..0.55f } &&
+                confidences.distinct().size <= 2
+            val filtered = if (isNoise) emptyList() else nmsResult
 
-            Log.i("InferenceEngine", "Total detections: ${allDetections.size} -> after NMS: ${filtered.size}")
+            Log.i("InferenceEngine", "Total detections: ${allDetections.size} -> after NMS: ${nmsResult.size} -> final: ${filtered.size}")
 
             return DisplayModel(
                 totalDetections = filtered.size,
