@@ -117,7 +117,7 @@ class MainActivity : AppCompatActivity() {
                 imageProxy.close()
                 if (result != null) {
                     runOnUiThread { binding.preprocessedImage.setImageBitmap(result.bitmap) }
-                    viewModel.processFrame(result.tensorBuffer, frameWidth, frameHeight)
+                    viewModel.processFrame(result.tensorBuffer)
                 }
             } else {
                 imageProxy.close()

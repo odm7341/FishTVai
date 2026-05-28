@@ -22,10 +22,10 @@ class MainViewModel(application: Application, private val useCase: MLProcessingU
     private val _errorState = MutableStateFlow<FailureReason?>(null)
     val errorState: StateFlow<FailureReason?> = _errorState
 
-    fun processFrame(tensor: ByteBuffer, frameWidth: Int, frameHeight: Int) {
+    fun processFrame(tensor: ByteBuffer) {
         viewModelScope.launch(Dispatchers.Default) {
             try {
-                val result = useCase.processFrame(tensor, frameWidth, frameHeight)
+                val result = useCase.processFrame(tensor)
                 _displayState.update { result }
                 _errorState.value = null
             } catch (e: Exception) {

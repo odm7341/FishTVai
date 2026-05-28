@@ -18,7 +18,7 @@ class MLProcessingUseCase(private val inferenceEngine: InferenceEngine) {
         }
     }
 
-    suspend fun processFrame(tensor: ByteBuffer, frameWidth: Int, frameHeight: Int): DisplayModel =
+    suspend fun processFrame(tensor: ByteBuffer): DisplayModel =
         withContext(Dispatchers.IO) {
             try {
                 ensureInitialized()

@@ -16,8 +16,6 @@ import java.io.FileOutputStream
 import java.io.InputStreamReader
 import java.nio.ByteBuffer
 import kotlin.math.exp
-import kotlin.math.max
-import kotlin.math.min
 
 class InferenceEngine(private val context: Context, private val modelFilename: String) {
 
@@ -218,46 +216,6 @@ class InferenceEngine(private val context: Context, private val modelFilename: S
             var bestIdx = -1
             for (c in 0 until numClasses) {
                 val raw = outputArray[(clsStart + c) * cols + col]
-                val score = if (useSigmoid) sigmoid(raw) else raw.coerceIn(0f, 1f)
-                if (score > bestScore) {
-                    bestScore = score
-                    bestIdx = c
-                }
-            }
-
-            if (bestScore > 0.5f && bestIdx >= 0) {
-                val x = (cx - bw / 2f).coerceIn(0f, 639f)
-                val y = (cy - bh / 2f).coerceIn(0f, 639f)
-                val w = bw.coerceIn(0f, 639f - x)
-                val h = bh.coerceIn(0f, 639f - y)
-                detections.add(
-                    Detection(
-                        labels.getOrElse(bestIdx) { "class_$bestIdx" },
-                        bestScore,
-                        Rect(x.toInt(), y.toInt(), (x + w).toInt(), (y + h).toInt())
-                    )
-                )
-            }
-        }
-        return detections
-    }
-
-    private fun parseRawRows(outputArray: FloatArray, rows: Int, useSigmoid: Boolean): List<Detection> {
-        val numClasses = labels.size
-        val stride = 4 + numClasses
-        val detections = mutableListOf<Detection>()
-        for (i in 0 until rows) {
-            val offset = i * stride
-            if (offset + stride > outputArray.size) break
-            val cx = outputArray[offset]
-            val cy = outputArray[offset + 1]
-            val bw = outputArray[offset + 2]
-            val bh = outputArray[offset + 3]
-
-            var bestScore = -1f
-            var bestIdx = -1
-            for (c in 0 until numClasses) {
-                val raw = outputArray[offset + 4 + c]
                 val score = if (useSigmoid) sigmoid(raw) else raw.coerceIn(0f, 1f)
                 if (score > bestScore) {
                     bestScore = score
