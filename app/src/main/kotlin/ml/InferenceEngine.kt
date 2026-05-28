@@ -146,79 +146,72 @@ class InferenceEngine(private val context: Context, private val modelFilename: S
 
         val numClasses = labels.size
         val n = outputArray.size
+        val expectedStride = 4 + numClasses
 
-        if (n >= 6 * 5 && n % 6 == 0) {
-            val cols = n / 6
-            Log.i("InferenceEngine", "Trying NMS column format: 6 x $cols")
-            val dets = parseBoxNmsColumns(outputArray, cols)
+        if (n % expectedStride == 0) {
+            val cols = n / expectedStride
+            Log.i("InferenceEngine", "Trying col-major [cx,cy,w,h,cls]: ${expectedStride} x $cols")
+            val dets = parseBoxClassColumns(outputArray, cols, boxFirst = true)
             if (dets.isNotEmpty()) return dets
         }
 
-        val stride = 4 + numClasses
-        if (stride > 4 && n % stride == 0) {
-            val cols = n / stride
-            Log.i("InferenceEngine", "Trying raw column-major: $stride x $cols")
-            val dets = parseRawColumns(outputArray, cols, stride)
+        if (n % expectedStride == 0) {
+            val cols = n / expectedStride
+            Log.i("InferenceEngine", "Trying col-major [cls,cx,cy,w,h]: ${expectedStride} x $cols")
+            val dets = parseBoxClassColumns(outputArray, cols, boxFirst = false)
             if (dets.isNotEmpty()) return dets
         }
 
-        if (stride > 4 && n % stride == 0) {
-            val rows = n / stride
-            Log.i("InferenceEngine", "Trying raw row-major: $rows x $stride")
-            val dets = parseRawRows(outputArray, rows, stride)
+        if (n % expectedStride == 0) {
+            val rows = n / expectedStride
+            Log.i("InferenceEngine", "Trying row-major [cx,cy,w,h,cls]: $rows x $expectedStride")
+            val dets = parseRawRows(outputArray, rows)
             if (dets.isNotEmpty()) return dets
         }
 
         if (numClasses > 0 && n >= numClasses) {
             Log.i("InferenceEngine", "Trying classification output")
-            val maxIndex = (0 until numClasses).maxByOrNull { outputArray[it] } ?: return emptyList()
-            val confidence = sigmoid(outputArray[maxIndex])
-            if (confidence > 0.3f) {
-                return listOf(
-                    Detection(labels.getOrElse(maxIndex) { "class_$maxIndex" }, confidence, Rect(100, 80, 500, 380))
-                )
-            }
+            val dets = parseClassification(outputArray)
+            if (dets.isNotEmpty()) return dets
         }
 
         Log.w("InferenceEngine", "Could not parse output of size $n with $numClasses classes")
         return emptyList()
     }
 
-    private fun parseBoxNmsColumns(outputArray: FloatArray, cols: Int): List<Detection> {
+    private fun parseBoxClassColumns(outputArray: FloatArray, cols: Int, boxFirst: Boolean): List<Detection> {
         val detections = mutableListOf<Detection>()
+        val numClasses = labels.size
         for (col in 0 until cols) {
-            val x1 = outputArray[col]
-            val y1 = outputArray[cols + col]
-            val x2 = outputArray[2 * cols + col]
-            val y2 = outputArray[3 * cols + col]
-            val score = sigmoid(outputArray[4 * cols + col])
-            val classId = outputArray[5 * cols + col].toInt()
+            val cxIdx: Int
+            val cyIdx: Int
+            val wIdx: Int
+            val hIdx: Int
+            val clsStart: Int
 
-            if (score > 0.3f && classId in labels.indices) {
-                val label = labels[classId]
-                detections.add(
-                    Detection(
-                        label, score,
-                        Rect(x1.toInt(), y1.toInt(), x2.toInt(), y2.toInt())
-                    )
-                )
+            if (boxFirst) {
+                cxIdx = 0
+                cyIdx = 1
+                wIdx = 2
+                hIdx = 3
+                clsStart = 4
+            } else {
+                clsStart = 0
+                cxIdx = numClasses
+                cyIdx = numClasses + 1
+                wIdx = numClasses + 2
+                hIdx = numClasses + 3
             }
-        }
-        return detections
-    }
 
-    private fun parseRawColumns(outputArray: FloatArray, cols: Int, stride: Int): List<Detection> {
-        val detections = mutableListOf<Detection>()
-        for (col in 0 until cols) {
-            val cx = outputArray[col]
-            val cy = outputArray[cols + col]
-            val bw = outputArray[2 * cols + col]
-            val bh = outputArray[3 * cols + col]
+            val cx = outputArray[cxIdx * cols + col]
+            val cy = outputArray[cyIdx * cols + col]
+            val bw = outputArray[wIdx * cols + col]
+            val bh = outputArray[hIdx * cols + col]
 
             var bestScore = -1f
             var bestIdx = -1
-            for (c in 0 until labels.size) {
-                val score = sigmoid(outputArray[(4 + c) * cols + col])
+            for (c in 0 until numClasses) {
+                val score = sigmoid(outputArray[(clsStart + c) * cols + col])
                 if (score > bestScore) {
                     bestScore = score
                     bestIdx = c
@@ -242,12 +235,13 @@ class InferenceEngine(private val context: Context, private val modelFilename: S
         return detections
     }
 
-    private fun parseRawRows(outputArray: FloatArray, rows: Int, stride: Int): List<Detection> {
+    private fun parseRawRows(outputArray: FloatArray, rows: Int): List<Detection> {
+        val numClasses = labels.size
+        val stride = 4 + numClasses
         val detections = mutableListOf<Detection>()
         for (i in 0 until rows) {
             val offset = i * stride
-            if (offset + 4 + labels.size > outputArray.size) break
-
+            if (offset + stride > outputArray.size) break
             val cx = outputArray[offset]
             val cy = outputArray[offset + 1]
             val bw = outputArray[offset + 2]
@@ -255,7 +249,7 @@ class InferenceEngine(private val context: Context, private val modelFilename: S
 
             var bestScore = -1f
             var bestIdx = -1
-            for (c in 0 until labels.size) {
+            for (c in 0 until numClasses) {
                 val score = sigmoid(outputArray[offset + 4 + c])
                 if (score > bestScore) {
                     bestScore = score
@@ -278,6 +272,17 @@ class InferenceEngine(private val context: Context, private val modelFilename: S
             }
         }
         return detections
+    }
+
+    private fun parseClassification(outputArray: FloatArray): List<Detection> {
+        val maxIndex = (0 until labels.size).maxByOrNull { sigmoid(outputArray[it]) } ?: return emptyList()
+        val confidence = sigmoid(outputArray[maxIndex])
+        if (confidence > 0.3f) {
+            return listOf(
+                Detection(labels.getOrElse(maxIndex) { "class_$maxIndex" }, confidence, Rect(100, 80, 500, 380))
+            )
+        }
+        return emptyList()
     }
 
     private fun sigmoid(x: Float): Float = 1f / (1f + exp(-x.toDouble())).toFloat()
