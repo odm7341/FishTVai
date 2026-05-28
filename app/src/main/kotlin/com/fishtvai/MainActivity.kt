@@ -116,7 +116,7 @@ class MainActivity : AppCompatActivity() {
             frameHeight = imageProxy.height
             val image = imageProxy.image
             if (image != null && isDetecting) {
-                val tensor = com.fishtvai.ml.util.ImageUtils.processImageToTensor(image, 224, 224)
+                val tensor = com.fishtvai.ml.util.ImageUtils.processImageToTensor(image, 640, 640)
                 imageProxy.close()
                 if (tensor != null) {
                     viewModel.processFrame(tensor, frameWidth, frameHeight)

@@ -34,7 +34,7 @@ class MLCameraAnalyzer : ImageAnalysis.Analyzer {
             try {
                 Log.d(TAG, "Starting image processing and tensor conversion.")
 
-                val inputTensor = ImageUtils.processImageToTensor(image, 224, 224)
+                val inputTensor = ImageUtils.processImageToTensor(image, 640, 640)
 
                 if (inputTensor == null) {
                     Log.e(TAG, "Failed to convert ImageProxy to Tensor.")

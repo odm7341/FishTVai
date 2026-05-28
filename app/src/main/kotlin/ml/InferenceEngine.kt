@@ -15,7 +15,9 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStreamReader
 import java.nio.ByteBuffer
-import java.nio.FloatBuffer
+import kotlin.math.exp
+import kotlin.math.max
+import kotlin.math.min
 
 class InferenceEngine(private val context: Context, private val modelFilename: String) {
 
@@ -23,6 +25,7 @@ class InferenceEngine(private val context: Context, private val modelFilename: S
     private var session: OrtSession? = null
     private var labels: List<String> = emptyList()
     private var inputName: String = ""
+    private var outputNames: List<String> = emptyList()
     private var modelFile: File? = null
 
     suspend fun initialize() = withContext(Dispatchers.IO) {
@@ -61,19 +64,21 @@ class InferenceEngine(private val context: Context, private val modelFilename: S
 
         try {
             environment = OrtEnvironment.getEnvironment()
-
             val sessionOptions = OrtSession.SessionOptions()
             sessionOptions.setIntraOpNumThreads(2)
             sessionOptions.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
-
             session = environment!!.createSession(targetFile.absolutePath, sessionOptions)
 
             val inputInfo = session!!.inputInfo
             inputName = inputInfo.keys.first()
-            Log.i("InferenceEngine", "Model input: '$inputName', ${inputInfo.values.first()}")
+            Log.i("InferenceEngine", "Model input: '$inputName'")
 
-            val outputInfo = session!!.outputInfo
-            Log.i("InferenceEngine", "Model outputs: ${outputInfo.keys}")
+            val outputs = session!!.outputInfo
+            outputNames = outputs.keys.toList()
+            Log.i("InferenceEngine", "Model outputs: $outputNames")
+            for ((name, _) in outputs) {
+                Log.i("InferenceEngine", "  Output: '$name'")
+            }
 
             Log.i("InferenceEngine", "ONNX Runtime initialized successfully.")
         } catch (e: Exception) {
@@ -87,7 +92,6 @@ class InferenceEngine(private val context: Context, private val modelFilename: S
     suspend fun runInference(tensorBuffer: ByteBuffer): DisplayModel = withContext(Dispatchers.IO) {
         val env = environment
         val sess = session
-
         if (env != null && sess != null) {
             runRealInference(env, sess, tensorBuffer)
         } else {
@@ -99,27 +103,37 @@ class InferenceEngine(private val context: Context, private val modelFilename: S
         try {
             tensorBuffer.rewind()
             val floatBuffer = tensorBuffer.asFloatBuffer()
-
-            val inputShape = longArrayOf(1, 3, 224, 224)
+            val inputShape = longArrayOf(1, 3, 640, 640)
             val inputTensor = OnnxTensor.createTensor(env, floatBuffer, inputShape)
-
             val inputs = mapOf(inputName to inputTensor)
             val results = sess.run(inputs)
 
-            val outputTensor = results[0] as? OnnxTensor
-                ?: throw RuntimeException("Unexpected output type")
+            val allDetections = mutableListOf<Detection>()
 
-            val outputBuffer = outputTensor.floatBuffer
-            val outputArray = FloatArray(outputBuffer.remaining())
-            outputBuffer.get(outputArray)
+            for (outputIdx in 0 until results.size()) {
+                val outputTensor = results[outputIdx] as? OnnxTensor ?: continue
+                val outputBuffer = outputTensor.floatBuffer
+                val outputArray = FloatArray(outputBuffer.remaining())
+                outputBuffer.get(outputArray)
+
+                val outName = if (outputIdx < outputNames.size) outputNames[outputIdx] else "output_$outputIdx"
+                Log.i("InferenceEngine", "Output '$outName': ${outputArray.size} floats, first 10: ${outputArray.take(10)}")
+
+                val dets = parseYoloOutput(outputArray)
+                allDetections.addAll(dets)
+            }
 
             inputTensor.close()
             results.close()
 
-            val detections = parseOutput(outputArray)
+            Log.i("InferenceEngine", "Total detections: ${allDetections.size}")
+            for (d in allDetections) {
+                Log.i("InferenceEngine", "  ${d.label} conf=${d.confidence} box=${d.boundingBoxPixels}")
+            }
+
             return DisplayModel(
-                totalDetections = detections.size,
-                detections = detections
+                totalDetections = allDetections.size,
+                detections = allDetections
             )
         } catch (e: Exception) {
             Log.e("InferenceEngine", "ONNX inference failed", e)
@@ -127,48 +141,146 @@ class InferenceEngine(private val context: Context, private val modelFilename: S
         }
     }
 
-    private fun parseOutput(outputArray: FloatArray): List<Detection> {
+    private fun parseYoloOutput(outputArray: FloatArray): List<Detection> {
         if (outputArray.isEmpty()) return emptyList()
 
-        if (outputArray.size == labels.size) {
-            val maxIndex = outputArray.indices.maxByOrNull { outputArray[it] } ?: return emptyList()
-            val confidence = outputArray[maxIndex]
-            val label = labels.getOrElse(maxIndex) { "class_$maxIndex" }
+        val numClasses = labels.size
+        val n = outputArray.size
+
+        if (n >= 6 * 5 && n % 6 == 0) {
+            val cols = n / 6
+            Log.i("InferenceEngine", "Trying NMS column format: 6 x $cols")
+            val dets = parseBoxNmsColumns(outputArray, cols)
+            if (dets.isNotEmpty()) return dets
+        }
+
+        val stride = 4 + numClasses
+        if (stride > 4 && n % stride == 0) {
+            val cols = n / stride
+            Log.i("InferenceEngine", "Trying raw column-major: $stride x $cols")
+            val dets = parseRawColumns(outputArray, cols, stride)
+            if (dets.isNotEmpty()) return dets
+        }
+
+        if (stride > 4 && n % stride == 0) {
+            val rows = n / stride
+            Log.i("InferenceEngine", "Trying raw row-major: $rows x $stride")
+            val dets = parseRawRows(outputArray, rows, stride)
+            if (dets.isNotEmpty()) return dets
+        }
+
+        if (numClasses > 0 && n >= numClasses) {
+            Log.i("InferenceEngine", "Trying classification output")
+            val maxIndex = (0 until numClasses).maxByOrNull { outputArray[it] } ?: return emptyList()
+            val confidence = sigmoid(outputArray[maxIndex])
             if (confidence > 0.3f) {
                 return listOf(
-                    Detection(label, confidence, Rect(100, 80, 400, 300))
+                    Detection(labels.getOrElse(maxIndex) { "class_$maxIndex" }, confidence, Rect(100, 80, 500, 380))
                 )
             }
-            return emptyList()
         }
 
+        Log.w("InferenceEngine", "Could not parse output of size $n with $numClasses classes")
+        return emptyList()
+    }
+
+    private fun parseBoxNmsColumns(outputArray: FloatArray, cols: Int): List<Detection> {
         val detections = mutableListOf<Detection>()
-        val numClasses = labels.size
-        val numDetections = outputArray.size / (numClasses + 4)
+        for (col in 0 until cols) {
+            val x1 = outputArray[col]
+            val y1 = outputArray[cols + col]
+            val x2 = outputArray[2 * cols + col]
+            val y2 = outputArray[3 * cols + col]
+            val score = sigmoid(outputArray[4 * cols + col])
+            val classId = outputArray[5 * cols + col].toInt()
 
-        for (i in 0 until numDetections.coerceAtMost(10)) {
-            val offset = i * (numClasses + 4)
-            val cx = outputArray[offset] * 640
-            val cy = outputArray[offset + 1] * 480
-            val w = outputArray[offset + 2] * 640
-            val h = outputArray[offset + 3] * 480
-
-            val scores = outputArray.sliceArray(offset + 4 until offset + 4 + numClasses)
-            val maxIndex = scores.indices.maxByOrNull { scores[it] } ?: continue
-            val confidence = scores[maxIndex]
-
-            if (confidence > 0.3f) {
-                val x = (cx - w / 2).toInt()
-                val y = (cy - h / 2).toInt()
-                val label = labels.getOrElse(maxIndex) { "class_$maxIndex" }
+            if (score > 0.3f && classId in labels.indices) {
+                val label = labels[classId]
                 detections.add(
-                    Detection(label, confidence, Rect(x, y, x + w.toInt(), y + h.toInt()))
+                    Detection(
+                        label, score,
+                        Rect(x1.toInt(), y1.toInt(), x2.toInt(), y2.toInt())
+                    )
                 )
             }
         }
-
         return detections
     }
+
+    private fun parseRawColumns(outputArray: FloatArray, cols: Int, stride: Int): List<Detection> {
+        val detections = mutableListOf<Detection>()
+        for (col in 0 until cols) {
+            val cx = outputArray[col]
+            val cy = outputArray[cols + col]
+            val bw = outputArray[2 * cols + col]
+            val bh = outputArray[3 * cols + col]
+
+            var bestScore = -1f
+            var bestIdx = -1
+            for (c in 0 until labels.size) {
+                val score = sigmoid(outputArray[(4 + c) * cols + col])
+                if (score > bestScore) {
+                    bestScore = score
+                    bestIdx = c
+                }
+            }
+
+            if (bestScore > 0.3f && bestIdx >= 0) {
+                val x = (cx - bw / 2f).coerceIn(0f, 639f)
+                val y = (cy - bh / 2f).coerceIn(0f, 639f)
+                val w = bw.coerceIn(0f, 639f - x)
+                val h = bh.coerceIn(0f, 639f - y)
+                detections.add(
+                    Detection(
+                        labels.getOrElse(bestIdx) { "class_$bestIdx" },
+                        bestScore,
+                        Rect(x.toInt(), y.toInt(), (x + w).toInt(), (y + h).toInt())
+                    )
+                )
+            }
+        }
+        return detections
+    }
+
+    private fun parseRawRows(outputArray: FloatArray, rows: Int, stride: Int): List<Detection> {
+        val detections = mutableListOf<Detection>()
+        for (i in 0 until rows) {
+            val offset = i * stride
+            if (offset + 4 + labels.size > outputArray.size) break
+
+            val cx = outputArray[offset]
+            val cy = outputArray[offset + 1]
+            val bw = outputArray[offset + 2]
+            val bh = outputArray[offset + 3]
+
+            var bestScore = -1f
+            var bestIdx = -1
+            for (c in 0 until labels.size) {
+                val score = sigmoid(outputArray[offset + 4 + c])
+                if (score > bestScore) {
+                    bestScore = score
+                    bestIdx = c
+                }
+            }
+
+            if (bestScore > 0.3f && bestIdx >= 0) {
+                val x = (cx - bw / 2f).coerceIn(0f, 639f)
+                val y = (cy - bh / 2f).coerceIn(0f, 639f)
+                val w = bw.coerceIn(0f, 639f - x)
+                val h = bh.coerceIn(0f, 639f - y)
+                detections.add(
+                    Detection(
+                        labels.getOrElse(bestIdx) { "class_$bestIdx" },
+                        bestScore,
+                        Rect(x.toInt(), y.toInt(), (x + w).toInt(), (y + h).toInt())
+                    )
+                )
+            }
+        }
+        return detections
+    }
+
+    private fun sigmoid(x: Float): Float = 1f / (1f + exp(-x.toDouble())).toFloat()
 
     private fun runSimulatedInference(): DisplayModel {
         Log.d("InferenceEngine", "Running simulated inference")
