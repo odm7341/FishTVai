@@ -3,22 +3,25 @@ package com.fishtvai
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.util.Log
 import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
-import androidx.camera.core.ImageProxy
+import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.fishtvai.databinding.ActivityMainBinding
 import com.fishtvai.ml.InferenceEngine
 import com.fishtvai.model.DisplayModel
 import com.fishtvai.usecase.MLProcessingUseCase
 import com.fishtvai.viewmodel.MainViewModel
+import kotlinx.coroutines.launch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -53,13 +56,21 @@ class MainActivity : AppCompatActivity() {
         val factory = MainViewModelFactory(application, useCase)
         viewModel = ViewModelProvider(this, factory)[MainViewModel::class.java]
 
-        viewModel.displayState.observe(this) { displayModel ->
-            updateUI(displayModel)
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.displayState.collect { displayModel ->
+                    updateUI(displayModel)
+                }
+            }
         }
 
-        viewModel.errorState.observe(this) { failure ->
-            failure?.let {
-                binding.detectionText.text = "Error: ${it.message}"
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.errorState.collect { failure ->
+                    failure?.let {
+                        binding.detectionText.text = "Error: ${it.message}"
+                    }
+                }
             }
         }
 
@@ -88,8 +99,12 @@ class MainActivity : AppCompatActivity() {
         val cameraProvider = cameraProvider ?: return
         val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
+        val preview = Preview.Builder()
+            .setTargetRotation(binding.previewView.display.rotation)
+            .build()
+        preview.setSurfaceProvider(binding.previewView.surfaceProvider)
+
         val imageAnalysis = ImageAnalysis.Builder()
-            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_LATEST)
             .setTargetRotation(binding.previewView.display.rotation)
             .build()
 
@@ -106,7 +121,7 @@ class MainActivity : AppCompatActivity() {
             this,
             cameraSelector,
             imageAnalysis,
-            binding.previewView.surfaceProvider
+            preview
         )
     }
 
@@ -137,6 +152,5 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         cameraExecutor.shutdown()
-        viewModel.onCleared()
     }
 }

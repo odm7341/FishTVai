@@ -1,7 +1,7 @@
 package com.fishtvai.viewmodel
 
 import android.app.Application
-import android.media.ImageProxy
+import androidx.camera.core.ImageProxy
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope

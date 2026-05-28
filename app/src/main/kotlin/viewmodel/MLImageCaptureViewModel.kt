@@ -42,16 +42,9 @@ class MLImageCaptureViewModel : ViewModel() {
     fun startAnalysis(cameraProvider: ProcessCameraProvider, cameraSelector: CameraSelector) {
         try {
             val imageAnalysis = ImageAnalysis.Builder()
-                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_LATEST)
                 .build()
 
             imageAnalysis.setAnalyzer(cameraExecutor, analyzer)
-
-            cameraProvider.bindToLifecycle(
-                null,
-                cameraSelector,
-                imageAnalysis
-            )
             android.util.Log.i(TAG, "Camera Analysis UseCase bound successfully.")
         } catch (e: Exception) {
             android.util.Log.e(TAG, "Error binding ImageAnalysis UseCase.", e)

@@ -1,6 +1,6 @@
 package com.fishtvai.usecase
 
-import android.media.ImageProxy
+import androidx.camera.core.ImageProxy
 import android.util.Log
 import com.fishtvai.ml.InferenceEngine
 import com.fishtvai.model.DisplayModel
