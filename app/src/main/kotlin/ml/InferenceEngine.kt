@@ -7,18 +7,28 @@ import com.fishtvai.model.DisplayModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileOutputStream
 import java.nio.ByteBuffer
 
-class InferenceEngine(private val context: Context, private val modelPath: String) {
+class InferenceEngine(private val context: Context, private val modelFilename: String) {
 
     private var onnxSession: Any? = null
+    private var modelFile: File? = null
 
     suspend fun initialize() = withContext(Dispatchers.IO) {
         Log.d("InferenceEngine", "Starting model initialization...")
-        val modelFile = File(context.filesDir, modelPath)
 
-        if (!modelFile.exists()) {
-            throw IllegalStateException("ML Model not found at: ${modelFile.absolutePath}")
+        val targetFile = File(context.filesDir, modelFilename)
+        modelFile = targetFile
+
+        if (!targetFile.exists()) {
+            Log.i("InferenceEngine", "Copying model from assets to $targetFile")
+            context.assets.open(modelFilename).use { input ->
+                FileOutputStream(targetFile).use { output ->
+                    input.copyTo(output)
+                }
+            }
+            Log.i("InferenceEngine", "Model copied (${targetFile.length()} bytes)")
         }
 
         onnxSession = "InitializedModelSession"
@@ -26,10 +36,6 @@ class InferenceEngine(private val context: Context, private val modelPath: Strin
     }
 
     suspend fun runInference(preprocessedBuffer: ByteBuffer): DisplayModel = withContext(Dispatchers.IO) {
-        if (preprocessedBuffer == null) {
-            throw IllegalArgumentException("Cannot run inference: input buffer is null.")
-        }
-
         Log.d("InferenceEngine", "Running inference with preprocessed buffer... (Simulation)")
         Thread.sleep(100)
 
