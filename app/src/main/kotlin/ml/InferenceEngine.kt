@@ -122,13 +122,16 @@ class InferenceEngine(private val context: Context, private val modelFilename: S
                 val stride = 4 + labels.size
                 val rows = outputArray.size / stride
                 if (outputArray.size % stride == 0) {
-                    // Sample cls scores (column 4 = cls0) at regular intervals
-                    val samples = (0 until minOf(rows, 100)).map { i -> (i * rows / 100) }
-                    val clsVals = samples.map { outputArray[it * stride + 4] }
-                    val minCls = clsVals.min()
-                    val maxCls = clsVals.max()
-                    val avgCls = clsVals.average()
-                    Log.i("InferenceEngine", "Row-major cls0 sampled across 100 rows: min=$minCls max=$maxCls avg=$avgCls")
+                    // Sample all columns at regular intervals to understand distribution
+                    val sampleIndices = (0 until 100).map { i -> (i * rows / 100) }
+                    val colRanges = (0 until stride).map { col ->
+                        val vals = sampleIndices.map { outputArray[it * stride + col] }
+                        val colMin = vals.min()
+                        val colMax = vals.max()
+                        val colAvg = vals.average()
+                        "c$col: rng=${"%.1f".format(colMin)}-${"%.1f".format(colMax)} avg=${"%.1f".format(colAvg)}"
+                    }
+                    Log.i("InferenceEngine", "Row-major column ranges: ${colRanges.joinToString(" | ")}")
                 }
 
                 val dets = parseYoloOutput(outputArray)
