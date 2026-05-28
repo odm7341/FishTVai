@@ -3,10 +3,7 @@ package com.fishtvai
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
-import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -113,7 +110,7 @@ class MainActivity : AppCompatActivity() {
             frameHeight = imageProxy.height
             val image = imageProxy.image
             val now = System.currentTimeMillis()
-            if (image != null && isDetecting && now - lastProcessTime >= 2000) {
+            if (image != null && isDetecting && now - lastProcessTime >= 1000) {
                 Log.i("MainActivity", "Camera frame: ${frameWidth}x${frameHeight}")
                 lastProcessTime = now
                 val result = com.fishtvai.ml.util.ImageUtils.processImageToTensor(image, 640, 640)
@@ -138,14 +135,12 @@ class MainActivity : AppCompatActivity() {
     private fun startDetection() {
         isDetecting = true
         binding.toggleButton.text = getString(R.string.stop_detection)
-        binding.overlayCard.visibility = View.VISIBLE
         Log.d("MainActivity", "Detection started")
     }
 
     private fun stopDetection() {
         isDetecting = false
         binding.toggleButton.text = getString(R.string.start_detection)
-        binding.overlayCard.visibility = View.GONE
         binding.detectionText.text = getString(R.string.no_detections)
         binding.boundingBoxOverlay.setDetections(emptyList(), 1, 1)
         Log.d("MainActivity", "Detection stopped")
