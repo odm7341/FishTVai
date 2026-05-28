@@ -127,10 +127,11 @@ class MainActivity : AppCompatActivity() {
             .build()
 
         imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
+            val w = imageProxy.width
+            val h = imageProxy.height
+            imageProxy.close()
             if (isDetecting) {
-                viewModel.processImageFrame(imageProxy)
-            } else {
-                imageProxy.close()
+                viewModel.processFrame(w, h)
             }
         }
 

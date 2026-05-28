@@ -1,7 +1,6 @@
 package com.fishtvai.viewmodel
 
 import android.app.Application
-import androidx.camera.core.ImageProxy
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -24,11 +23,11 @@ class MainViewModel(application: Application, private val useCase: MLProcessingU
     private val _frameSize = MutableStateFlow(0 to 0)
     val frameSize: StateFlow<Pair<Int, Int>> = _frameSize
 
-    fun processImageFrame(imageProxy: ImageProxy) {
-        _frameSize.update { imageProxy.width to imageProxy.height }
+    fun processFrame(frameWidth: Int, frameHeight: Int) {
+        _frameSize.update { frameWidth to frameHeight }
         viewModelScope.launch {
             try {
-                val result = useCase.processFrame(imageProxy)
+                val result = useCase.processFrame(frameWidth, frameHeight)
                 _displayState.update { result }
                 _errorState.value = null
             } catch (e: Exception) {
@@ -39,7 +38,7 @@ class MainViewModel(application: Application, private val useCase: MLProcessingU
                 )
                 _errorState.update { failure }
                 Log.e("MainViewModel", "Processing failed", e)
-            }
+}
         }
     }
 

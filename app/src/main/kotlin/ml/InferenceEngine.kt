@@ -35,7 +35,7 @@ class InferenceEngine(private val context: Context, private val modelFilename: S
         Log.i("InferenceEngine", "ML Model initialized successfully.")
     }
 
-    suspend fun runInference(preprocessedBuffer: ByteBuffer): DisplayModel = withContext(Dispatchers.IO) {
+    suspend fun runInference(preprocessedBuffer: ByteBuffer?): DisplayModel = withContext(Dispatchers.IO) {
         Log.d("InferenceEngine", "Running inference with preprocessed buffer... (Simulation)")
         Thread.sleep(100)
 
