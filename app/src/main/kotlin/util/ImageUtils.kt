@@ -58,11 +58,11 @@ object ImageUtils {
                 val g = rgbBytes[srcIdx + 1].toInt() and 0xFF
                 val b = rgbBytes[srcIdx + 2].toInt() and 0xFF
 
-                // Convert to [-1, 1] range
+                // Convert to [0, 1] range (standard YOLO normalization)
                 val hwcIdx = (py * targetWidth + px) * 3
-                chwData[hwcIdx] = r / 127.5f - 1.0f
-                chwData[hwcIdx + 1] = g / 127.5f - 1.0f
-                chwData[hwcIdx + 2] = b / 127.5f - 1.0f
+                chwData[hwcIdx] = r / 255.0f
+                chwData[hwcIdx + 1] = g / 255.0f
+                chwData[hwcIdx + 2] = b / 255.0f
             }
         }
 
