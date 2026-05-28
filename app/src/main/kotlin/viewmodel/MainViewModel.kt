@@ -20,11 +20,7 @@ class MainViewModel(application: Application, private val useCase: MLProcessingU
     private val _errorState = MutableStateFlow<FailureReason?>(null)
     val errorState: StateFlow<FailureReason?> = _errorState
 
-    private val _frameSize = MutableStateFlow(0 to 0)
-    val frameSize: StateFlow<Pair<Int, Int>> = _frameSize
-
     fun processFrame(frameWidth: Int, frameHeight: Int) {
-        _frameSize.update { frameWidth to frameHeight }
         viewModelScope.launch {
             try {
                 val result = useCase.processFrame(frameWidth, frameHeight)

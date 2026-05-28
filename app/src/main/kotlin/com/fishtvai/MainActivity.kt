@@ -3,6 +3,9 @@ package com.fishtvai
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
 import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -21,7 +24,6 @@ import com.fishtvai.ml.InferenceEngine
 import com.fishtvai.model.DisplayModel
 import com.fishtvai.usecase.MLProcessingUseCase
 import com.fishtvai.viewmodel.MainViewModel
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -33,6 +35,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var viewModel: MainViewModel
     private var isDetecting = false
     private var cameraProvider: ProcessCameraProvider? = null
+    private var frameWidth = 0
+    private var frameHeight = 0
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -50,9 +54,7 @@ class MainActivity : AppCompatActivity() {
 
         cameraExecutor = Executors.newSingleThreadExecutor()
 
-        val context = applicationContext
-        val modelPath = "fishtv.onnx"
-        val inferenceEngine = InferenceEngine(context, modelPath)
+        val inferenceEngine = InferenceEngine(applicationContext, "fishtv.onnx")
         val useCase = MLProcessingUseCase(inferenceEngine)
         val factory = MainViewModelFactory(application, useCase)
         viewModel = ViewModelProvider(this, factory)[MainViewModel::class.java]
@@ -67,25 +69,9 @@ class MainActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                combine(
-                    viewModel.displayState,
-                    viewModel.frameSize
-                ) { displayModel, frameSize ->
-                    Pair(displayModel, frameSize)
-                }.collect { (displayModel, frameSize) ->
-                    val w = frameSize.first
-                    val h = frameSize.second
-                    if (w > 0 && h > 0) {
-                        binding.boundingBoxOverlay.setDetections(displayModel.detections, w, h)
-                    }
-                }
-            }
-        }
-
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.errorState.collect { failure ->
                     failure?.let {
+                        Log.e("MainActivity", "Error: ${it.message}")
                         binding.detectionText.text = "Error: ${it.message}"
                     }
                 }
@@ -123,15 +109,16 @@ class MainActivity : AppCompatActivity() {
         preview.setSurfaceProvider(binding.previewView.surfaceProvider)
 
         val imageAnalysis = ImageAnalysis.Builder()
-            .setTargetRotation(binding.previewView.display.rotation)
             .build()
 
+        var frameCount = 0
         imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
-            val w = imageProxy.width
-            val h = imageProxy.height
+            frameWidth = imageProxy.width
+            frameHeight = imageProxy.height
             imageProxy.close()
             if (isDetecting) {
-                viewModel.processFrame(w, h)
+                Log.d("MainActivity", "Camera frame ${++frameCount}: ${frameWidth}x${frameHeight}")
+                viewModel.processFrame(frameWidth, frameHeight)
             }
         }
 
@@ -148,6 +135,7 @@ class MainActivity : AppCompatActivity() {
         isDetecting = true
         binding.toggleButton.text = getString(R.string.stop_detection)
         binding.overlayCard.visibility = View.VISIBLE
+        Log.d("MainActivity", "Detection started")
     }
 
     private fun stopDetection() {
@@ -155,9 +143,18 @@ class MainActivity : AppCompatActivity() {
         binding.toggleButton.text = getString(R.string.start_detection)
         binding.overlayCard.visibility = View.GONE
         binding.detectionText.text = getString(R.string.no_detections)
+        binding.boundingBoxOverlay.setDetections(emptyList(), 1, 1)
+        Log.d("MainActivity", "Detection stopped")
     }
 
+    private var lastFrameTime = 0L
     private fun updateUI(displayModel: DisplayModel) {
+        val now = System.currentTimeMillis()
+        val dt = now - lastFrameTime
+        lastFrameTime = now
+
+        Log.d("MainActivity", "updateUI: ${displayModel.detections.size} detections, dt=${dt}ms")
+
         binding.detectionText.text = if (displayModel.detections.isEmpty()) {
             getString(R.string.no_detections)
         } else {
@@ -165,7 +162,11 @@ class MainActivity : AppCompatActivity() {
                 "${detection.label}: ${"%.1f".format(detection.confidence * 100)}%"
             }
         }
-        binding.fpsText.text = "${displayModel.detections.size} objects"
+        binding.fpsText.text = "${displayModel.detections.size} objects, ${dt}ms"
+
+        if (frameWidth > 0 && frameHeight > 0) {
+            binding.boundingBoxOverlay.setDetections(displayModel.detections, frameWidth, frameHeight)
+        }
     }
 
     override fun onDestroy() {
