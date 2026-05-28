@@ -157,19 +157,23 @@ class MainActivity : AppCompatActivity() {
         val dt = now - lastFrameTime
         lastFrameTime = now
 
-        Log.d("MainActivity", "updateUI: ${displayModel.detections.size} detections, dt=${dt}ms")
+        val dets = displayModel.detections
+        Log.d("MainActivity", "updateUI: ${dets.size} detections, dt=${dt}ms")
 
-        binding.detectionText.text = if (displayModel.detections.isEmpty()) {
+        binding.detectionText.text = if (dets.isEmpty()) {
             getString(R.string.no_detections)
         } else {
-            displayModel.detections.joinToString("\n") { detection ->
-                "${detection.label}: ${"%.1f".format(detection.confidence * 100)}%"
+            // Show summary: count + top 3 detections
+            val top = dets.sortedByDescending { it.confidence }.take(3)
+            val lines = top.joinToString("\n") { d ->
+                "${d.label}: ${"%.0f".format(d.confidence * 100)}%"
             }
+            "${dets.size} objects\n$lines"
         }
-        binding.fpsText.text = "${displayModel.detections.size} objects, ${dt}ms"
+        binding.fpsText.text = "${dets.size} objects, ${dt}ms"
 
         if (frameWidth > 0 && frameHeight > 0) {
-            binding.boundingBoxOverlay.setDetections(displayModel.detections, frameWidth, frameHeight)
+            binding.boundingBoxOverlay.setDetections(dets.take(200), frameWidth, frameHeight)
         }
     }
 

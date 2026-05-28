@@ -136,11 +136,13 @@ class InferenceEngine(private val context: Context, private val modelFilename: S
             inputTensor.close()
             results.close()
 
-            Log.i("InferenceEngine", "Total detections: ${allDetections.size}")
+            val filtered = nms(allDetections)
+
+            Log.i("InferenceEngine", "Total detections: ${allDetections.size} -> after NMS: ${filtered.size}")
 
             return DisplayModel(
-                totalDetections = allDetections.size,
-                detections = allDetections
+                totalDetections = filtered.size,
+                detections = filtered
             )
         } catch (e: Exception) {
             Log.e("InferenceEngine", "ONNX inference failed", e)
@@ -300,6 +302,31 @@ class InferenceEngine(private val context: Context, private val modelFilename: S
     }
 
     private fun sigmoid(x: Float): Float = 1f / (1f + exp(-x.toDouble())).toFloat()
+
+    private fun nms(detections: List<Detection>, iouThreshold: Float = 0.5f, maxDetections: Int = 50): List<Detection> {
+        if (detections.size <= 1) return detections
+        val sorted = detections.sortedByDescending { it.confidence }
+        val selected = mutableListOf<Detection>()
+        val remaining = sorted.toMutableList()
+        while (remaining.isNotEmpty() && selected.size < maxDetections) {
+            val best = remaining.removeAt(0)
+            selected.add(best)
+            remaining.removeAll { IoU(best.boundingBoxPixels, it.boundingBoxPixels) > iouThreshold }
+        }
+        return selected
+    }
+
+    private fun IoU(a: android.graphics.Rect, b: android.graphics.Rect): Float {
+        val interLeft = maxOf(a.left, b.left)
+        val interTop = maxOf(a.top, b.top)
+        val interRight = minOf(a.right, b.right)
+        val interBottom = minOf(a.bottom, b.bottom)
+        if (interLeft >= interRight || interTop >= interBottom) return 0f
+        val interArea = (interRight - interLeft).toLong() * (interBottom - interTop).toLong()
+        val aArea = (a.right - a.left).toLong() * (a.bottom - a.top).toLong()
+        val bArea = (b.right - b.left).toLong() * (b.bottom - b.top).toLong()
+        return interArea.toFloat() / (aArea + bArea - interArea).toFloat()
+    }
 
     private fun runSimulatedInference(): DisplayModel {
         Log.d("InferenceEngine", "Running simulated inference")
