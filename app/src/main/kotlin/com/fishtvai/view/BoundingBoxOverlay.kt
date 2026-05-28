@@ -49,17 +49,18 @@ class BoundingBoxOverlay @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
 
-        val scaleX = width.toFloat() / imageWidth
-        val scaleY = height.toFloat() / imageHeight
+        val scale = minOf(width.toFloat() / imageWidth, height.toFloat() / imageHeight)
+        val offsetX = (width - imageWidth * scale) / 2f
+        val offsetY = (height - imageHeight * scale) / 2f
 
         for (detection in detections) {
             val src = detection.boundingBoxPixels
 
             tempRectF.set(
-                src.left * scaleX,
-                src.top * scaleY,
-                src.right * scaleX,
-                src.bottom * scaleY
+                src.left * scale + offsetX,
+                src.top * scale + offsetY,
+                src.right * scale + offsetX,
+                src.bottom * scale + offsetY
             )
 
             canvas.drawRoundRect(tempRectF, 8f, 8f, boxPaint)

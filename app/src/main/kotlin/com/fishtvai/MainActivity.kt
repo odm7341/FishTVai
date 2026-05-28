@@ -173,7 +173,7 @@ class MainActivity : AppCompatActivity() {
         binding.fpsText.text = "${dets.size} objects, ${dt}ms"
 
         if (frameWidth > 0 && frameHeight > 0) {
-            binding.boundingBoxOverlay.setDetections(dets.take(200), frameWidth, frameHeight)
+            binding.boundingBoxOverlay.setDetections(dets.take(200), 640, 640)
         }
     }
 
