@@ -169,29 +169,10 @@ class InferenceEngine(private val context: Context, private val modelFilename: S
         val expectedStride = 4 + numClasses
 
         if (n % expectedStride == 0) {
-            val rows = n / expectedStride
-            for (useSigmoid in listOf(true, false)) {
-                val sigLabel = if (useSigmoid) "sigmoid" else "raw"
-                Log.i("InferenceEngine", "Trying row-major [cx,cy,w,h,cls] $sigLabel: $rows x $expectedStride")
-                val dets = parseRawRows(outputArray, rows, useSigmoid)
-                if (dets.isNotEmpty()) return dets
-            }
-        }
-
-        if (n % expectedStride == 0) {
             val cols = n / expectedStride
-            for (useSigmoid in listOf(true, false)) {
-                val sigLabel = if (useSigmoid) "sigmoid" else "raw"
-                Log.i("InferenceEngine", "Trying col-major [cx,cy,w,h,cls] $sigLabel: ${expectedStride} x $cols")
-                val dets = parseBoxClassColumns(outputArray, cols, boxFirst = true, useSigmoid)
-                if (dets.isNotEmpty()) return dets
-            }
-            for (useSigmoid in listOf(true, false)) {
-                val sigLabel = if (useSigmoid) "sigmoid" else "raw"
-                Log.i("InferenceEngine", "Trying col-major [cls,cx,cy,w,h] $sigLabel: ${expectedStride} x $cols")
-                val dets = parseBoxClassColumns(outputArray, cols, boxFirst = false, useSigmoid)
-                if (dets.isNotEmpty()) return dets
-            }
+            Log.i("InferenceEngine", "Trying col-major [cx,cy,w,h,cls] (model has internal sigmoid): ${expectedStride} x $cols")
+            val dets = parseBoxClassColumns(outputArray, cols, boxFirst = true, useSigmoid = false)
+            if (dets.isNotEmpty()) return dets
         }
 
         if (numClasses > 0 && n >= numClasses) {
