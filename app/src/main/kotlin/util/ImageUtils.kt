@@ -45,10 +45,8 @@ object ImageUtils {
         val tensorSize = targetWidth * targetHeight * 3
         val tensorBuffer = ByteBuffer.allocateDirect(tensorSize * 4).order(ByteOrder.nativeOrder())
 
-        var sumR = 0L
-        var sumG = 0L
-        var sumB = 0L
         val numPixels = targetWidth * targetHeight
+        val chwData = FloatArray(numPixels * 3)
 
         for (py in 0 until targetHeight) {
             for (px in 0 until targetWidth) {
@@ -59,18 +57,25 @@ object ImageUtils {
                 val r = rgbBytes[srcIdx].toInt() and 0xFF
                 val g = rgbBytes[srcIdx + 1].toInt() and 0xFF
                 val b = rgbBytes[srcIdx + 2].toInt() and 0xFF
-                sumR += r
-                sumG += g
-                sumB += b
 
-                // Convert to [-1, 1] range (common for YOLO models)
-                tensorBuffer.putFloat(r / 127.5f - 1.0f)
-                tensorBuffer.putFloat(g / 127.5f - 1.0f)
-                tensorBuffer.putFloat(b / 127.5f - 1.0f)
+                // Convert to [-1, 1] range
+                val hwcIdx = (py * targetWidth + px) * 3
+                chwData[hwcIdx] = r / 127.5f - 1.0f
+                chwData[hwcIdx + 1] = g / 127.5f - 1.0f
+                chwData[hwcIdx + 2] = b / 127.5f - 1.0f
             }
         }
 
-        android.util.Log.i("ImageUtils", "Input pixel mean: R=${sumR/numPixels} G=${sumG/numPixels} B=${sumB/numPixels} (0-255 scale)")
+        // Write in CHW order (model expects NCHW: [1, 3, H, W])
+        // All R values, then all G values, then all B values
+        for (c in 0 until 3) {
+            for (py in 0 until targetHeight) {
+                for (px in 0 until targetWidth) {
+                    val hwcIdx = (py * targetWidth + px) * 3 + c
+                    tensorBuffer.putFloat(chwData[hwcIdx])
+                }
+            }
+        }
 
         tensorBuffer.rewind()
         return tensorBuffer
