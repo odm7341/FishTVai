@@ -17,30 +17,62 @@ object ImageUtils {
     fun processImageToTensor(image: Image, targetWidth: Int, targetHeight: Int): PreprocessedResult? {
         if (image == null) return null
 
-        val yBuffer: ByteBuffer = image.planes[0].buffer
-        val uBuffer: ByteBuffer = image.planes[1].buffer
-        val vBuffer: ByteBuffer = image.planes[2].buffer
+        val planes = image.planes
+        val yPlane = planes[0]
+        val uPlane = planes[1]
+        val vPlane = planes[2]
+
+        val yBuf = yPlane.buffer
+        val uBuf = uPlane.buffer
+        val vBuf = vPlane.buffer
+
+        val yRowStride = yPlane.rowStride
+        val yPixelStride = yPlane.pixelStride
+        val uRowStride = uPlane.rowStride
+        val uPixelStride = uPlane.pixelStride
+        val vRowStride = vPlane.rowStride
+        val vPixelStride = vPlane.pixelStride
+
         val width = image.width
         val height = image.height
 
-        val fullSize = width * height
-        val rgbBytes = ByteArray(fullSize * 3)
+        val isSemiPlanar = uPixelStride == 2
+
+        // Copy planes to byte arrays to avoid buffer position issues
+        val yArr = ByteArray(yBuf.remaining())
+        yBuf.get(yArr)
+        val uArr = ByteArray(uBuf.remaining())
+        uBuf.get(uArr)
+        val vArr = ByteArray(vBuf.remaining())
+        vBuf.get(vArr)
+
+        val rgbBytes = ByteArray(width * height * 3)
 
         for (y in 0 until height) {
             for (x in 0 until width) {
-                val yIndex = y * width + x
-                val uIndex = (y / 2) * (width / 2) + (x / 2)
-                val vIndex = uIndex
+                val yIdx = y * yRowStride + x * yPixelStride
+                val Y = yArr[yIdx].toInt() and 0xFF
 
-                val Y = yBuffer.get(yIndex).toInt() and 0xFF
-                val U = uBuffer.get(uIndex).toInt() and 0xFF
-                val V = vBuffer.get(vIndex).toInt() and 0xFF
+                val uvY = y / 2
+                val uvX = x / 2
+                val uvIdx = uvY * uRowStride + uvX * uPixelStride
+
+                val U: Int
+                val V: Int
+                if (isSemiPlanar) {
+                    U = uArr[uvIdx].toInt() and 0xFF
+                    V = if (uvIdx + 1 < uArr.size) uArr[uvIdx + 1].toInt() and 0xFF else 128
+                } else {
+                    val vIdx = uvY * vRowStride + uvX * vPixelStride
+                    U = uArr[uvIdx].toInt() and 0xFF
+                    V = if (vIdx < vArr.size) vArr[vIdx].toInt() and 0xFF else 128
+                }
 
                 val r = (Y + 1.402 * (V - 128)).toInt().coerceIn(0, 255)
                 val g = (Y - 0.344 * (U - 128) - 0.714 * (V - 128)).toInt().coerceIn(0, 255)
                 val b = (Y + 1.772 * (U - 128)).toInt().coerceIn(0, 255)
 
-                val idx = yIndex * 3
+                val idx = (y * width + x) * 3
                 rgbBytes[idx] = r.toByte()
                 rgbBytes[idx + 1] = g.toByte()
                 rgbBytes[idx + 2] = b.toByte()
