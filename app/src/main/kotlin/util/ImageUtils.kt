@@ -45,6 +45,11 @@ object ImageUtils {
         val tensorSize = targetWidth * targetHeight * 3
         val tensorBuffer = ByteBuffer.allocateDirect(tensorSize * 4).order(ByteOrder.nativeOrder())
 
+        var sumR = 0L
+        var sumG = 0L
+        var sumB = 0L
+        val numPixels = targetWidth * targetHeight
+
         for (py in 0 until targetHeight) {
             for (px in 0 until targetWidth) {
                 val sourceX = (px * width / targetWidth).coerceIn(0, width - 1)
@@ -54,13 +59,18 @@ object ImageUtils {
                 val r = rgbBytes[srcIdx].toInt() and 0xFF
                 val g = rgbBytes[srcIdx + 1].toInt() and 0xFF
                 val b = rgbBytes[srcIdx + 2].toInt() and 0xFF
+                sumR += r
+                sumG += g
+                sumB += b
 
-                // Try BGR order instead of RGB (model may have been trained on OpenCV/BGR images)
-                tensorBuffer.putFloat(b / 255.0f)
-                tensorBuffer.putFloat(g / 255.0f)
-                tensorBuffer.putFloat(r / 255.0f)
+                // Convert to [-1, 1] range (common for YOLO models)
+                tensorBuffer.putFloat(r / 127.5f - 1.0f)
+                tensorBuffer.putFloat(g / 127.5f - 1.0f)
+                tensorBuffer.putFloat(b / 127.5f - 1.0f)
             }
         }
+
+        android.util.Log.i("ImageUtils", "Input pixel mean: R=${sumR/numPixels} G=${sumG/numPixels} B=${sumB/numPixels} (0-255 scale)")
 
         tensorBuffer.rewind()
         return tensorBuffer
