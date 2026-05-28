@@ -7,10 +7,12 @@ import androidx.lifecycle.viewModelScope
 import com.fishtvai.model.DisplayModel
 import com.fishtvai.model.FailureReason
 import com.fishtvai.usecase.MLProcessingUseCase
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.nio.ByteBuffer
 
 class MainViewModel(application: Application, private val useCase: MLProcessingUseCase) : AndroidViewModel(application) {
 
@@ -20,10 +22,10 @@ class MainViewModel(application: Application, private val useCase: MLProcessingU
     private val _errorState = MutableStateFlow<FailureReason?>(null)
     val errorState: StateFlow<FailureReason?> = _errorState
 
-    fun processFrame(frameWidth: Int, frameHeight: Int) {
-        viewModelScope.launch {
+    fun processFrame(tensor: ByteBuffer, frameWidth: Int, frameHeight: Int) {
+        viewModelScope.launch(Dispatchers.Default) {
             try {
-                val result = useCase.processFrame(frameWidth, frameHeight)
+                val result = useCase.processFrame(tensor, frameWidth, frameHeight)
                 _displayState.update { result }
                 _errorState.value = null
             } catch (e: Exception) {
@@ -34,7 +36,7 @@ class MainViewModel(application: Application, private val useCase: MLProcessingU
                 )
                 _errorState.update { failure }
                 Log.e("MainViewModel", "Processing failed", e)
-}
+            }
         }
     }
 

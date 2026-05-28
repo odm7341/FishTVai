@@ -5,6 +5,7 @@ import com.fishtvai.ml.InferenceEngine
 import com.fishtvai.model.DisplayModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.nio.ByteBuffer
 
 class MLProcessingUseCase(private val inferenceEngine: InferenceEngine) {
 
@@ -17,11 +18,11 @@ class MLProcessingUseCase(private val inferenceEngine: InferenceEngine) {
         }
     }
 
-    suspend fun processFrame(frameWidth: Int, frameHeight: Int): DisplayModel =
+    suspend fun processFrame(tensor: ByteBuffer, frameWidth: Int, frameHeight: Int): DisplayModel =
         withContext(Dispatchers.IO) {
             try {
                 ensureInitialized()
-                inferenceEngine.runInference(null)
+                inferenceEngine.runInference(tensor)
             } catch (e: IllegalArgumentException) {
                 Log.e("MLPipeline", "Input Data Error: ${e.message}")
                 throw IllegalStateException("Input data failure", e)

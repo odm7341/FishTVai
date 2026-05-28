@@ -111,14 +111,18 @@ class MainActivity : AppCompatActivity() {
         val imageAnalysis = ImageAnalysis.Builder()
             .build()
 
-        var frameCount = 0
         imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
             frameWidth = imageProxy.width
             frameHeight = imageProxy.height
-            imageProxy.close()
-            if (isDetecting) {
-                Log.d("MainActivity", "Camera frame ${++frameCount}: ${frameWidth}x${frameHeight}")
-                viewModel.processFrame(frameWidth, frameHeight)
+            val image = imageProxy.image
+            if (image != null && isDetecting) {
+                val tensor = com.fishtvai.ml.util.ImageUtils.processImageToTensor(image, 224, 224)
+                imageProxy.close()
+                if (tensor != null) {
+                    viewModel.processFrame(tensor, frameWidth, frameHeight)
+                }
+            } else {
+                imageProxy.close()
             }
         }
 
