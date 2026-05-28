@@ -119,14 +119,16 @@ class InferenceEngine(private val context: Context, private val modelFilename: S
                 val outName = if (outputIdx < outputNames.size) outputNames[outputIdx] else "output_$outputIdx"
                 Log.i("InferenceEngine", "Output '$outName': ${outputArray.size} floats, first 10: ${outputArray.take(10)}")
 
-                val expectedStride = 4 + labels.size
-                // Log row-major interpretation: cls scores at detection 0 and detection ~4200
-                val rows = outputArray.size / expectedStride
-                if (outputArray.size % expectedStride == 0) {
-                    val rm0_c0 = outputArray[4]; val rm0_c1 = outputArray[5]; val rm0_c2 = outputArray[6]
-                    val midOff = (rows / 2) * expectedStride
-                    val rmMid_c0 = outputArray[midOff + 4]
-                    Log.i("InferenceEngine", "Row-major det0 cls=$rm0_c0,$rm0_c1,$rm0_c2 detMid cls0=$rmMid_c0")
+                val stride = 4 + labels.size
+                val rows = outputArray.size / stride
+                if (outputArray.size % stride == 0) {
+                    // Sample cls scores (column 4 = cls0) at regular intervals
+                    val samples = (0 until minOf(rows, 100)).map { i -> (i * rows / 100) }
+                    val clsVals = samples.map { outputArray[it * stride + 4] }
+                    val minCls = clsVals.min()
+                    val maxCls = clsVals.max()
+                    val avgCls = clsVals.average()
+                    Log.i("InferenceEngine", "Row-major cls0 sampled across 100 rows: min=$minCls max=$maxCls avg=$avgCls")
                 }
 
                 val dets = parseYoloOutput(outputArray)
