@@ -119,6 +119,7 @@ class MainActivity : AppCompatActivity() {
             val image = imageProxy.image
             val now = System.currentTimeMillis()
             if (image != null && isDetecting && now - lastProcessTime >= 2000) {
+                Log.i("MainActivity", "Camera frame: ${frameWidth}x${frameHeight}")
                 lastProcessTime = now
                 val tensor = com.fishtvai.ml.util.ImageUtils.processImageToTensor(image, 640, 640)
                 imageProxy.close()
