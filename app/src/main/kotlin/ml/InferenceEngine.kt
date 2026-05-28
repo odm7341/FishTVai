@@ -283,8 +283,9 @@ class InferenceEngine(private val context: Context, private val modelFilename: S
     }
 
     private fun parseClassification(outputArray: FloatArray): List<Detection> {
-        val maxIndex = (0 until labels.size).maxByOrNull { sigmoid(outputArray[it]) } ?: return emptyList()
-        val confidence = sigmoid(outputArray[maxIndex])
+        // Model already has internal sigmoid; values are probabilities in [0,1]
+        val maxIndex = (0 until labels.size).maxByOrNull { outputArray[it] } ?: return emptyList()
+        val confidence = outputArray[maxIndex].coerceIn(0f, 1f)
         if (confidence > 0.3f) {
             return listOf(
                 Detection(labels.getOrElse(maxIndex) { "class_$maxIndex" }, confidence, Rect(100, 80, 500, 380))

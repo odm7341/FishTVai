@@ -99,6 +99,8 @@ class MainActivity : AppCompatActivity() {
         }, ContextCompat.getMainExecutor(this))
     }
 
+    private var lastProcessTime = 0L
+
     private fun bindCameraUseCases() {
         val cameraProvider = cameraProvider ?: return
         val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
@@ -115,7 +117,9 @@ class MainActivity : AppCompatActivity() {
             frameWidth = imageProxy.width
             frameHeight = imageProxy.height
             val image = imageProxy.image
-            if (image != null && isDetecting) {
+            val now = System.currentTimeMillis()
+            if (image != null && isDetecting && now - lastProcessTime >= 2000) {
+                lastProcessTime = now
                 val tensor = com.fishtvai.ml.util.ImageUtils.processImageToTensor(image, 640, 640)
                 imageProxy.close()
                 if (tensor != null) {
